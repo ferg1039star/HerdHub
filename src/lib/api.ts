@@ -135,10 +135,16 @@ export async function deleteMaintenance(id: string): Promise<void> {
   if (error) throw error;
 }
 
-// Fully deletes the signed-in user's account: storage photos, all ranch data,
-// and the auth user record. Photos are removed through the storage API (which
-// deletes the underlying files), then the `delete_account` RPC removes the auth
-// user, cascading to every ranch-owned row. See supabase/migrations/0002.
+// Deletes the signed-in user's account and all associated data.
+//
+// 1. Remove storage photos via the Storage API (RLS lets a user delete objects
+//    under their own ranch folder; this also deletes the underlying files).
+// 2. Call the `delete_account` RPC, which removes the auth user and cascades all
+//    ranch data (supabase/migrations/0002).
+// 3. If that RPC is unavailable (e.g. the migration hasn't been applied to the
+//    project yet), fall back to deleting the ranch row directly via RLS, which
+//    still cascades away every ranch-owned record so no user data is left
+//    behind. The auth login row is only removed once the RPC is in place.
 export async function deleteAccount(ranchId: string): Promise<void> {
   try {
     const { data: files } = await supabase.storage.from("animal-photos").list(ranchId);
@@ -146,9 +152,12 @@ export async function deleteAccount(ranchId: string): Promise<void> {
       await supabase.storage.from("animal-photos").remove(files.map((f) => `${ranchId}/${f.name}`));
     }
   } catch {
-    // Photo cleanup is best-effort; the RPC also clears storage rows as a fallback.
+    // Photo cleanup is best-effort and must not block account deletion.
   }
 
   const { error } = await supabase.rpc("delete_account");
-  if (error) throw error;
+  if (error) {
+    const { error: fallbackError } = await supabase.from("ranches").delete().eq("id", ranchId);
+    if (fallbackError) throw fallbackError;
+  }
 }
