@@ -1,0 +1,2 @@
+# HerdHub
+Ranch management application
