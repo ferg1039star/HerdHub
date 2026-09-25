@@ -8,6 +8,8 @@ import AnimalDetail from "./pages/AnimalDetail";
 import Protocols from "./pages/Protocols";
 import Maintenance from "./pages/Maintenance";
 import Settings from "./pages/Settings";
+import Privacy from "./pages/Privacy";
+import Support from "./pages/Support";
 import TabBar from "./components/TabBar";
 import type { ReactNode } from "react";
 
@@ -40,6 +42,8 @@ export default function App() {
       <Route path="/protocols" element={<Protected><Protocols /></Protected>} />
       <Route path="/maintenance" element={<Protected><Maintenance /></Protected>} />
       <Route path="/settings" element={<Protected><Settings /></Protected>} />
+      <Route path="/privacy" element={<Privacy />} />
+      <Route path="/support" element={<Support />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   addLocation,
+  deleteAccount,
   deleteLocation,
-  deleteRanchData,
   getLocations,
   getRanch,
   updateRanchName,
@@ -78,7 +78,7 @@ export default function Settings() {
     await load();
   }
 
-  async function deleteAccount() {
+  async function handleDeleteAccount() {
     if (!ranch) return;
     if (confirmName !== ranch.name) {
       setError("Type the ranch name exactly to confirm deletion.");
@@ -87,7 +87,7 @@ export default function Settings() {
     setDeleting(true);
     setError(null);
     try {
-      await deleteRanchData(ranch.id);
+      await deleteAccount(ranch.id);
       await signOut();
       navigate("/login", { replace: true });
     } catch (err) {
@@ -129,15 +129,23 @@ export default function Settings() {
         </ul>
       </div>
 
-      {(PRIVACY_URL || SUPPORT_URL) && (
-        <>
-          <h2>Legal & support</h2>
-          <div className="card">
-            {PRIVACY_URL && <div><a href={PRIVACY_URL} target="_blank" rel="noreferrer">Privacy policy</a></div>}
-            {SUPPORT_URL && <div style={{ marginTop: 6 }}><a href={SUPPORT_URL} target="_blank" rel="noreferrer">Support</a></div>}
-          </div>
-        </>
-      )}
+      <h2>Legal & support</h2>
+      <div className="card">
+        <div>
+          {PRIVACY_URL ? (
+            <a href={PRIVACY_URL} target="_blank" rel="noreferrer">Privacy policy</a>
+          ) : (
+            <Link to="/privacy">Privacy policy</Link>
+          )}
+        </div>
+        <div style={{ marginTop: 6 }}>
+          {SUPPORT_URL ? (
+            <a href={SUPPORT_URL} target="_blank" rel="noreferrer">Support</a>
+          ) : (
+            <Link to="/support">Support</Link>
+          )}
+        </div>
+      </div>
 
       <h2>Account</h2>
       <div className="card">
@@ -149,13 +157,14 @@ export default function Settings() {
       <h2 style={{ color: "var(--danger)" }}>Danger zone</h2>
       <div className="card">
         <div className="subtle">
-          Deleting removes all ranch data — animals, events, protocols, locations, maintenance, and photos.
-          Type the ranch name <strong>{ranch?.name}</strong> to confirm.
+          Deleting permanently removes your account (login) and all ranch data — animals, events, protocols,
+          locations, maintenance, and photos. This cannot be undone. Type the ranch name{" "}
+          <strong>{ranch?.name}</strong> to confirm.
         </div>
         <div className="spacer" />
         <input placeholder="Ranch name" value={confirmName} onChange={(e) => setConfirmName(e.target.value)} />
         <div className="spacer" />
-        <button className="danger block" onClick={deleteAccount} disabled={deleting}>
+        <button className="danger block" onClick={handleDeleteAccount} disabled={deleting}>
           {deleting ? "Deleting…" : "Delete account & ranch data"}
         </button>
       </div>

@@ -135,10 +135,20 @@ export async function deleteMaintenance(id: string): Promise<void> {
   if (error) throw error;
 }
 
-// Deletes all ranch data (cascades to locations, animals, protocols, events,
-// maintenance and profile via ON DELETE CASCADE). The auth user row itself
-// requires a service-role edge function; see README "Account deletion".
-export async function deleteRanchData(ranchId: string): Promise<void> {
-  const { error } = await supabase.from("ranches").delete().eq("id", ranchId);
+// Fully deletes the signed-in user's account: storage photos, all ranch data,
+// and the auth user record. Photos are removed through the storage API (which
+// deletes the underlying files), then the `delete_account` RPC removes the auth
+// user, cascading to every ranch-owned row. See supabase/migrations/0002.
+export async function deleteAccount(ranchId: string): Promise<void> {
+  try {
+    const { data: files } = await supabase.storage.from("animal-photos").list(ranchId);
+    if (files && files.length > 0) {
+      await supabase.storage.from("animal-photos").remove(files.map((f) => `${ranchId}/${f.name}`));
+    }
+  } catch {
+    // Photo cleanup is best-effort; the RPC also clears storage rows as a fallback.
+  }
+
+  const { error } = await supabase.rpc("delete_account");
   if (error) throw error;
 }
