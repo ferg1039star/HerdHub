@@ -1,0 +1,11 @@
+{
+  "name": "HerdHub — Ranch Inventory",
+  "install": "npm ci",
+  "terminals": [
+    {
+      "name": "vite",
+      "command": "npm run dev"
+    }
+  ],
+  "ports": [5173]
+}
