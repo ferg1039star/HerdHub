@@ -10,6 +10,7 @@ import {
 } from "../lib/api";
 import { supabase } from "../lib/supabase";
 import { isIntegerTag } from "../lib/sortTags";
+import { errorMessage, isUniqueViolation } from "../lib/errors";
 import type { Animal, AnimalSex, AnimalStatus, DobPrecision, Location } from "../types";
 
 const STATUSES: AnimalStatus[] = ["active", "sold", "dead", "culled", "missing"];
@@ -141,8 +142,9 @@ export default function AnimalForm() {
         navigate(`/animals/${created.id}`);
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Save failed";
-      setError(msg.includes("duplicate") || msg.includes("unique") ? "That tag number already exists on this ranch." : msg);
+      setError(
+        isUniqueViolation(err) ? "That tag number already exists on this ranch." : errorMessage(err)
+      );
     } finally {
       setBusy(false);
     }
