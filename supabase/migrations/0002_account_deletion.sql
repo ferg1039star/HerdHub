@@ -5,13 +5,13 @@
 -- and maintenance_items.
 --
 -- Storage photos are removed by the client (src/lib/api.ts `deleteAccount`)
--- through the storage API before this RPC is called.
+-- through the Storage API before this RPC is called. The function deliberately
+-- does NOT delete from storage.objects: Supabase blocks direct deletes on
+-- storage tables (42501, "Direct deletion from storage tables is not allowed").
 --
--- auth.users is owned by the locked-down `supabase_auth_admin` role, and the
--- `postgres` role that runs migrations/SQL cannot delete from it (error 42501).
--- postgres IS a (non-inheriting) member of supabase_auth_admin, so we reassign
--- the function's owner to that role; the security-definer function then executes
--- with the privileges needed to delete the auth user.
+-- The function runs as its owner (postgres) via SECURITY DEFINER. postgres has
+-- DELETE privilege on auth.users, so the account row is removed. (No owner
+-- reassignment is needed — postgres is not a member of supabase_auth_admin.)
 
 create or replace function public.delete_account()
 returns void
@@ -32,5 +32,3 @@ $$;
 
 revoke all on function public.delete_account() from public, anon;
 grant execute on function public.delete_account() to authenticated;
-
-alter function public.delete_account() owner to supabase_auth_admin;
