@@ -5,10 +5,13 @@
 -- and maintenance_items.
 --
 -- Storage photos are removed by the client (src/lib/api.ts `deleteAccount`)
--- through the storage API before this RPC is called — the storage delete RLS
--- policy allows a user to remove objects under their own ranch folder. The RPC
--- deliberately does NOT touch storage.objects: a definer function owned by
--- `postgres` lacks DELETE on that locked-down table, which would raise 42501.
+-- through the storage API before this RPC is called.
+--
+-- auth.users is owned by the locked-down `supabase_auth_admin` role, and the
+-- `postgres` role that runs migrations/SQL cannot delete from it (error 42501).
+-- postgres IS a (non-inheriting) member of supabase_auth_admin, so we reassign
+-- the function's owner to that role; the security-definer function then executes
+-- with the privileges needed to delete the auth user.
 
 create or replace function public.delete_account()
 returns void
@@ -29,3 +32,5 @@ $$;
 
 revoke all on function public.delete_account() from public, anon;
 grant execute on function public.delete_account() to authenticated;
+
+alter function public.delete_account() owner to supabase_auth_admin;
