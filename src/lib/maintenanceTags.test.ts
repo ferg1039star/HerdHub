@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { displayMaintenanceTag, formatNextMaintenanceTagNumber, sortMaintenanceByTag } from "./maintenanceTags";
 
+describe("displayMaintenanceTag", () => {
+  it("uses capital M prefix without hash", () => {
+    expect(displayMaintenanceTag("001")).toBe("M001");
+    expect(displayMaintenanceTag("014")).toBe("M014");
+  });
+});
+
 describe("formatNextMaintenanceTagNumber", () => {
   it("starts at 001", () => {
     expect(formatNextMaintenanceTagNumber([])).toBe("001");
