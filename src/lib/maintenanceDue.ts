@@ -1,3 +1,4 @@
+import { sortMaintenanceByTag } from "./maintenanceTags";
 import type { MaintenanceItem } from "../types";
 
 /** Item still needs work on the due board / Maintenance Due section. */
@@ -8,11 +9,9 @@ export function isMaintenanceDue(m: MaintenanceItem): boolean {
 }
 
 export function maintenanceDueItems(items: MaintenanceItem[]): MaintenanceItem[] {
-  return items.filter(isMaintenanceDue);
+  return sortMaintenanceByTag(items.filter(isMaintenanceDue));
 }
 
 export function maintenanceLogItems(items: MaintenanceItem[]): MaintenanceItem[] {
-  return items
-    .filter((m) => m.completed_on)
-    .sort((a, b) => (a.completed_on! < b.completed_on! ? 1 : a.completed_on! > b.completed_on! ? -1 : 0));
+  return sortMaintenanceByTag(items.filter((m) => m.completed_on));
 }

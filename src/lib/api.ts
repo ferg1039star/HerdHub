@@ -1,4 +1,6 @@
 import { supabase } from "./supabase";
+import { formatNextMaintenanceTagNumber } from "./maintenanceTags";
+import { isUniqueViolation } from "./errors";
 import type {
   Animal,
   AnimalEvent,
@@ -129,15 +131,35 @@ export async function getMaintenance(): Promise<MaintenanceItem[]> {
 }
 
 export type MaintenanceInput = Omit<MaintenanceItem, "id" | "created_at">;
+export type MaintenanceCreateInput = Omit<MaintenanceInput, "tag_number">;
 
-export async function createMaintenance(input: MaintenanceInput): Promise<void> {
-  const { error } = await supabase.from("maintenance_items").insert(input);
+const MAINT_TAG_COLLISION =
+  "That maintenance tag number already exists on this ranch. Try again.";
+
+async function allocateNextMaintenanceTagNumber(ranchId: string): Promise<string> {
+  const { data, error } = await supabase
+    .from("maintenance_items")
+    .select("tag_number")
+    .eq("ranch_id", ranchId);
   if (error) throw error;
+  return formatNextMaintenanceTagNumber((data ?? []).map((row) => row.tag_number));
+}
+
+export async function createMaintenance(input: MaintenanceCreateInput): Promise<void> {
+  const tag_number = await allocateNextMaintenanceTagNumber(input.ranch_id);
+  const { error } = await supabase.from("maintenance_items").insert({ ...input, tag_number });
+  if (error) {
+    if (isUniqueViolation(error)) throw new Error(MAINT_TAG_COLLISION);
+    throw error;
+  }
 }
 
 export async function updateMaintenance(id: string, input: Partial<MaintenanceInput>): Promise<void> {
   const { error } = await supabase.from("maintenance_items").update(input).eq("id", id);
-  if (error) throw error;
+  if (error) {
+    if (isUniqueViolation(error)) throw new Error(MAINT_TAG_COLLISION);
+    throw error;
+  }
 }
 
 export async function deleteMaintenance(id: string): Promise<void> {

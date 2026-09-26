@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { createEvent, getAnimals, getEvents, getMaintenance, getProtocols, getRanch } from "../lib/api";
 import { dueStatus, getRanchDueBoard } from "../lib/protocolEngine";
 import { isMaintenanceDue } from "../lib/maintenanceDue";
+import { displayMaintenanceTag, sortMaintenanceByTag } from "../lib/maintenanceTags";
 import { todayIso } from "../lib/date";
 import type { Animal, AnimalEvent, DueItem, MaintenanceItem, Protocol, Ranch } from "../types";
 
@@ -131,7 +132,7 @@ function bucketDue(items: DueItem[]) {
 }
 
 function bucketMaintenance(items: MaintenanceItem[], today: string) {
-  const withDue = items.filter(isMaintenanceDue);
+  const withDue = sortMaintenanceByTag(items.filter(isMaintenanceDue));
   return {
     overdue: withDue.filter((m) => dueStatus(m.due_on!, today) === "overdue"),
     due: withDue.filter((m) => dueStatus(m.due_on!, today) === "due"),
@@ -191,7 +192,8 @@ function MaintBucket({ label, tone, items }: { label: string; tone: string; item
         <Link key={m.id} className={`card due-row ${tone}`} to="/maintenance">
           <div className="card row">
             <div>
-              <h3>{m.title}</h3>
+              <div className="tag-num">{displayMaintenanceTag(m.tag_number)}</div>
+              <h3 style={{ margin: "2px 0 0", fontSize: 15 }}>{m.title}</h3>
               {m.notes && <div className="subtle">{m.notes}</div>}
             </div>
             <span className={`pill ${tone}`}>{m.due_on}</span>

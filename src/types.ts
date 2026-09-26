@@ -76,6 +76,7 @@ export interface AnimalEvent {
 export interface MaintenanceItem {
   id: string;
   ranch_id: string;
+  tag_number: string;
   title: string;
   completed_on: string | null;
   due_on: string | null;

@@ -8,6 +8,7 @@ import {
 } from "../lib/api";
 import { dueStatus } from "../lib/protocolEngine";
 import { isMaintenanceDue, maintenanceDueItems, maintenanceLogItems } from "../lib/maintenanceDue";
+import { displayMaintenanceTag } from "../lib/maintenanceTags";
 import { todayIso } from "../lib/date";
 import type { MaintenanceItem } from "../types";
 
@@ -309,7 +310,8 @@ function MaintenanceCard({
     <div className="card">
       <div className="card row" style={{ margin: 0, border: "none", padding: 0 }}>
         <div style={{ flex: 1 }}>
-          <h3>{m.title}</h3>
+          <div className="tag-num">{displayMaintenanceTag(m.tag_number)}</div>
+          <h3 style={{ margin: "2px 0 0" }}>{m.title}</h3>
           {logView ? (
             <div className="subtle">
               Performed {m.completed_on}

@@ -30,6 +30,9 @@ export default function AnimalDetail() {
   const [showStatus, setShowStatus] = useState(false);
   const [statusPick, setStatusPick] = useState<AnimalStatus>("active");
   const [statusBusy, setStatusBusy] = useState(false);
+  const [showLocation, setShowLocation] = useState(false);
+  const [locationPick, setLocationPick] = useState("");
+  const [locationBusy, setLocationBusy] = useState(false);
 
   const today = todayIso();
 
@@ -123,8 +126,31 @@ export default function AnimalDetail() {
 
   function openStatusPicker() {
     if (!animal) return;
+    setShowLocation(false);
     setStatusPick(animal.status);
     setShowStatus(true);
+  }
+
+  function openLocationPicker() {
+    if (!animal) return;
+    setShowStatus(false);
+    setLocationPick(animal.location_id ?? locations[0]?.id ?? "");
+    setShowLocation(true);
+  }
+
+  async function saveLocation() {
+    if (!animal || !locationPick) return;
+    setLocationBusy(true);
+    setError(null);
+    try {
+      await updateAnimal(animal.id, { location_id: locationPick });
+      setShowLocation(false);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Location update failed");
+    } finally {
+      setLocationBusy(false);
+    }
   }
 
   async function doneToday(item: DueItem) {
@@ -191,7 +217,10 @@ export default function AnimalDetail() {
             </div>
           </div>
         </div>
-        {animal.notes && (<><div className="subtle" style={{ marginTop: 8 }}>Notes</div><div>{animal.notes}</div></>)}
+        <div style={{ marginTop: 8 }}>
+          <div className="subtle">Notes</div>
+          <div>{animal.notes?.trim() ? animal.notes : "None"}</div>
+        </div>
       </div>
 
       <h2>Due items</h2>
@@ -280,6 +309,34 @@ export default function AnimalDetail() {
         </div>
       ) : (
         <button className="primary block" onClick={openStatusPicker}>Change status</button>
+      )}
+      <div className="spacer" />
+      {showLocation ? (
+        <div className="card">
+          <label htmlFor="location-pick">Location</label>
+          <select
+            id="location-pick"
+            value={locationPick}
+            onChange={(e) => setLocationPick(e.target.value)}
+          >
+            {locations.map((l) => (
+              <option key={l.id} value={l.id}>{l.name}</option>
+            ))}
+          </select>
+          <div className="spacer" />
+          <div className="row-inline">
+            <button className="accent block" disabled={locationBusy || !locationPick} onClick={saveLocation}>
+              {locationBusy ? "Saving…" : "Save location"}
+            </button>
+            <button className="block" type="button" disabled={locationBusy} onClick={() => setShowLocation(false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        !animal.archived_at && (
+          <button className="accent block" onClick={openLocationPicker}>Change location</button>
+        )
       )}
       <div className="spacer" />
       {animal.archived_at ? (

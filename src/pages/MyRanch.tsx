@@ -145,7 +145,7 @@ export default function MyRanch() {
                   ) : urgent ? (
                     <span className={`pill ${urgent.status}`}>{urgent.status}</span>
                   ) : (
-                    <span className="pill muted">ok</span>
+                    <span className="label-accent">Nothing due</span>
                   )}
                 </div>
               </div>
