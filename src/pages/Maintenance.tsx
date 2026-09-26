@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   createMaintenance,
   deleteMaintenance,
@@ -7,6 +7,7 @@ import {
   updateMaintenance,
 } from "../lib/api";
 import { dueStatus } from "../lib/protocolEngine";
+import { isMaintenanceDue, maintenanceDueItems, maintenanceLogItems } from "../lib/maintenanceDue";
 import { todayIso } from "../lib/date";
 import type { MaintenanceItem } from "../types";
 
@@ -23,7 +24,6 @@ export default function Maintenance() {
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
 
-  // Inline edit state.
   const [editId, setEditId] = useState<string | null>(null);
   const [eTitle, setETitle] = useState("");
   const [eCompleted, setECompleted] = useState("");
@@ -33,6 +33,9 @@ export default function Maintenance() {
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const today = todayIso();
+
+  const dueItems = useMemo(() => maintenanceDueItems(items), [items]);
+  const logItems = useMemo(() => maintenanceLogItems(items), [items]);
 
   async function load() {
     const [m, r] = await Promise.all([getMaintenance(), getRanch()]);
@@ -119,8 +122,6 @@ export default function Maintenance() {
     setBusyId(m.id);
     setError(null);
     try {
-      // Sets completed_on to today; leaves due_on untouched so the operator can
-      // set the next follow-up date by hand when they want one.
       await updateMaintenance(m.id, { completed_on: today });
       await load();
     } catch (err) {
@@ -144,7 +145,7 @@ export default function Maintenance() {
         <h1>Maintenance</h1>
         <button className="primary" onClick={() => setShowForm((v) => !v)}>{showForm ? "Close" : "+ Add"}</button>
       </div>
-      <div className="subtle">Ranch-level upkeep journal.</div>
+      <div className="subtle">Ranch-level maintenance journal.</div>
 
       {error && <div className="error">{error}</div>}
 
@@ -169,64 +170,175 @@ export default function Maintenance() {
         </form>
       )}
 
-      {items.length === 0 ? (
-        <div className="empty">No maintenance items yet.</div>
+      <h2>Due</h2>
+      {dueItems.length === 0 ? (
+        <div className="empty">Nothing due. Add an item or set a next due date.</div>
       ) : (
-        items.map((m) => {
-          if (editId === m.id) {
-            return (
-              <form key={m.id} className="card" onSubmit={saveEdit}>
-                <label htmlFor={`et-${m.id}`}>Title</label>
-                <input id={`et-${m.id}`} value={eTitle} onChange={(e) => setETitle(e.target.value)} />
-                <div className="row-inline">
-                  <div>
-                    <label htmlFor={`ec-${m.id}`}>Completed on</label>
-                    <input id={`ec-${m.id}`} type="date" value={eCompleted} onChange={(e) => setECompleted(e.target.value)} />
-                  </div>
-                  <div>
-                    <label htmlFor={`ed-${m.id}`}>Next due</label>
-                    <input id={`ed-${m.id}`} type="date" value={eDue} onChange={(e) => setEDue(e.target.value)} />
-                  </div>
-                </div>
-                <label htmlFor={`en-${m.id}`}>Notes</label>
-                <textarea id={`en-${m.id}`} value={eNotes} onChange={(e) => setENotes(e.target.value)} />
-                <div className="spacer" />
-                <div className="row-inline">
-                  <button className="primary block" type="submit" disabled={eBusy}>{eBusy ? "Saving…" : "Save"}</button>
-                  <button className="block" type="button" onClick={() => setEditId(null)}>Cancel</button>
-                </div>
-              </form>
-            );
-          }
-
-          const st = m.due_on ? dueStatus(m.due_on, today) : null;
-          return (
-            <div key={m.id} className="card">
-              <div className="card row" style={{ margin: 0, border: "none", padding: 0 }}>
-                <div onClick={() => startEdit(m)} style={{ flex: 1, cursor: "pointer" }}>
-                  <h3>{m.title}</h3>
-                  <div className="subtle">
-                    {m.completed_on ? `Done ${m.completed_on}` : "Not done"}
-                    {m.due_on ? ` · due ${m.due_on}` : ""}
-                  </div>
-                  {m.notes && <div className="subtle">{m.notes}</div>}
-                </div>
-                <div className="right">
-                  {st && <span className={`pill ${st}`}>{st}</span>}
-                </div>
-              </div>
-              <div className="spacer" />
-              <div className="row-inline">
-                <button className="primary block" disabled={busyId === m.id} onClick={() => markDone(m)}>
-                  {busyId === m.id ? "Saving…" : "Done today"}
-                </button>
-                <button className="block" onClick={() => startEdit(m)}>Edit</button>
-                <button className="danger block" onClick={() => remove(m.id)}>Delete</button>
-              </div>
-            </div>
-          );
-        })
+        dueItems.map((m) => (
+          <MaintenanceCard
+            key={`due-${m.id}`}
+            m={m}
+            today={today}
+            editId={editId}
+            eTitle={eTitle}
+            eCompleted={eCompleted}
+            eDue={eDue}
+            eNotes={eNotes}
+            eBusy={eBusy}
+            busyId={busyId}
+            showDoneToday
+            onStartEdit={startEdit}
+            onSaveEdit={saveEdit}
+            onCancelEdit={() => setEditId(null)}
+            setETitle={setETitle}
+            setECompleted={setECompleted}
+            setEDue={setEDue}
+            setENotes={setENotes}
+            onDoneToday={markDone}
+            onRemove={remove}
+          />
+        ))
       )}
+
+      <h2>Log</h2>
+      {logItems.length === 0 ? (
+        <div className="empty">No completed maintenance yet.</div>
+      ) : (
+        logItems.map((m) => (
+          <MaintenanceCard
+            key={`log-${m.id}`}
+            m={m}
+            today={today}
+            editId={editId}
+            eTitle={eTitle}
+            eCompleted={eCompleted}
+            eDue={eDue}
+            eNotes={eNotes}
+            eBusy={eBusy}
+            busyId={busyId}
+            showDoneToday={isMaintenanceDue(m)}
+            onStartEdit={startEdit}
+            onSaveEdit={saveEdit}
+            onCancelEdit={() => setEditId(null)}
+            setETitle={setETitle}
+            setECompleted={setECompleted}
+            setEDue={setEDue}
+            setENotes={setENotes}
+            onDoneToday={markDone}
+            onRemove={remove}
+            logView
+          />
+        ))
+      )}
+    </div>
+  );
+}
+
+function MaintenanceCard({
+  m,
+  today,
+  editId,
+  eTitle,
+  eCompleted,
+  eDue,
+  eNotes,
+  eBusy,
+  busyId,
+  showDoneToday,
+  logView,
+  onStartEdit,
+  onSaveEdit,
+  onCancelEdit,
+  setETitle,
+  setECompleted,
+  setEDue,
+  setENotes,
+  onDoneToday,
+  onRemove,
+}: {
+  m: MaintenanceItem;
+  today: string;
+  editId: string | null;
+  eTitle: string;
+  eCompleted: string;
+  eDue: string;
+  eNotes: string;
+  eBusy: boolean;
+  busyId: string | null;
+  showDoneToday: boolean;
+  logView?: boolean;
+  onStartEdit: (m: MaintenanceItem) => void;
+  onSaveEdit: (e: React.FormEvent) => void;
+  onCancelEdit: () => void;
+  setETitle: (v: string) => void;
+  setECompleted: (v: string) => void;
+  setEDue: (v: string) => void;
+  setENotes: (v: string) => void;
+  onDoneToday: (m: MaintenanceItem) => void;
+  onRemove: (id: string) => void;
+}) {
+  if (editId === m.id) {
+    return (
+      <form className="card" onSubmit={onSaveEdit}>
+        <label htmlFor={`et-${m.id}`}>Title</label>
+        <input id={`et-${m.id}`} value={eTitle} onChange={(e) => setETitle(e.target.value)} />
+        <div className="row-inline">
+          <div>
+            <label htmlFor={`ec-${m.id}`}>Completed on</label>
+            <input id={`ec-${m.id}`} type="date" value={eCompleted} onChange={(e) => setECompleted(e.target.value)} />
+          </div>
+          <div>
+            <label htmlFor={`ed-${m.id}`}>Next due</label>
+            <input id={`ed-${m.id}`} type="date" value={eDue} onChange={(e) => setEDue(e.target.value)} />
+          </div>
+        </div>
+        <label htmlFor={`en-${m.id}`}>Notes</label>
+        <textarea id={`en-${m.id}`} value={eNotes} onChange={(e) => setENotes(e.target.value)} />
+        <div className="spacer" />
+        <div className="row-inline">
+          <button className="primary block" type="submit" disabled={eBusy}>{eBusy ? "Saving…" : "Save"}</button>
+          <button className="block" type="button" onClick={onCancelEdit}>Cancel</button>
+        </div>
+      </form>
+    );
+  }
+
+  const st = m.due_on && isMaintenanceDue(m) ? dueStatus(m.due_on, today) : null;
+
+  return (
+    <div className="card">
+      <div className="card row" style={{ margin: 0, border: "none", padding: 0 }}>
+        <div style={{ flex: 1 }}>
+          <h3>{m.title}</h3>
+          {logView ? (
+            <div className="subtle">
+              Performed {m.completed_on}
+              {m.notes ? ` · ${m.notes}` : ""}
+            </div>
+          ) : (
+            <>
+              <div className="subtle">
+                {m.completed_on ? `Last done ${m.completed_on}` : "Not done yet"}
+                {m.due_on ? ` · due ${m.due_on}` : ""}
+              </div>
+              {m.notes && <div className="subtle">{m.notes}</div>}
+            </>
+          )}
+        </div>
+        <div className="right">
+          {st && <span className={`pill ${st}`}>{st}</span>}
+        </div>
+      </div>
+      <div className="spacer" />
+      <div className="row-inline">
+        {showDoneToday && (
+          <button className="primary block" disabled={busyId === m.id} onClick={() => onDoneToday(m)}>
+            {busyId === m.id ? "Saving…" : "Done today"}
+          </button>
+        )}
+        <button className="block" onClick={() => onStartEdit(m)}>Edit</button>
+        <button className="danger block" onClick={() => onRemove(m.id)}>Delete</button>
+      </div>
     </div>
   );
 }

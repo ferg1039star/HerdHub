@@ -83,6 +83,11 @@ export async function createProtocol(input: ProtocolInput): Promise<void> {
   if (error) throw error;
 }
 
+export async function updateProtocol(id: string, input: Partial<ProtocolInput>): Promise<void> {
+  const { error } = await supabase.from("protocols").update(input).eq("id", id);
+  if (error) throw error;
+}
+
 export async function deleteProtocol(id: string): Promise<void> {
   const { error } = await supabase.from("protocols").delete().eq("id", id);
   if (error) throw error;

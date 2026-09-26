@@ -24,6 +24,9 @@ export default function Settings() {
   const [notice, setNotice] = useState<string | null>(null);
 
   const [name, setName] = useState("");
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+  const [nameBusy, setNameBusy] = useState(false);
   const [newLocation, setNewLocation] = useState("");
   const [confirmName, setConfirmName] = useState("");
   const [deleting, setDeleting] = useState(false);
@@ -32,6 +35,7 @@ export default function Settings() {
     const [r, l] = await Promise.all([getRanch(), getLocations()]);
     setRanch(r);
     setName(r?.name ?? "");
+    setNameDraft(r?.name ?? "");
     setLocations(l);
   }
 
@@ -50,13 +54,24 @@ export default function Settings() {
   async function saveName() {
     if (!ranch) return;
     setError(null);
+    setNameBusy(true);
     try {
-      await updateRanchName(ranch.id, name.trim() || "My Ranch");
+      const next = nameDraft.trim() || "My Ranch";
+      await updateRanchName(ranch.id, next);
       setNotice("Ranch name saved.");
+      setEditingName(false);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setNameBusy(false);
     }
+  }
+
+  function cancelNameEdit() {
+    setNameDraft(name);
+    setEditingName(false);
+    setError(null);
   }
 
   async function addLoc() {
@@ -73,7 +88,7 @@ export default function Settings() {
   }
 
   async function removeLoc(id: string) {
-    if (!confirm("Delete this location? Animals there become Unassigned.")) return;
+    if (!confirm("Delete this location? Animals there lose this pen assignment.")) return;
     await deleteLocation(id);
     await load();
   }
@@ -107,10 +122,28 @@ export default function Settings() {
 
       <h2>Ranch</h2>
       <div className="card">
-        <label htmlFor="rname">Ranch name</label>
-        <input id="rname" value={name} onChange={(e) => setName(e.target.value)} />
-        <div className="spacer" />
-        <button className="primary" onClick={saveName}>Save name</button>
+        <div className="subtle">Ranch name</div>
+        {editingName ? (
+          <>
+            <label htmlFor="rname">Ranch name</label>
+            <input id="rname" value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} />
+            <div className="spacer" />
+            <div className="row-inline">
+              <button className="primary block" disabled={nameBusy} onClick={saveName}>
+                {nameBusy ? "Saving…" : "Save"}
+              </button>
+              <button className="block" type="button" disabled={nameBusy} onClick={cancelNameEdit}>Cancel</button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={{ fontSize: "1.1rem", fontWeight: 600 }}>{name || "My Ranch"}</div>
+            <div className="spacer" />
+            <button className="block" onClick={() => { setNameDraft(name); setEditingName(true); }}>
+              Edit name
+            </button>
+          </>
+        )}
       </div>
 
       <h2>Locations</h2>

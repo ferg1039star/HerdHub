@@ -47,8 +47,9 @@ export default function AnimalForm() {
         setRanchId(ranch?.id ?? null);
         setLocations(locs);
         setSpeciesList([...new Set(animals.map((a) => a.species))].sort());
-        const unassigned = locs.find((l) => l.name === "Unassigned") ?? locs[0];
-        setLocationId(unassigned?.id ?? "");
+        const defaultLoc =
+          locs.find((l) => l.name === "Back Pasture") ?? locs[0];
+        setLocationId(defaultLoc?.id ?? "");
 
         if (editing && id) {
           const a = await getAnimal(id);
@@ -61,7 +62,7 @@ export default function AnimalForm() {
             setDob(a.date_of_birth ?? "");
             setApproxAge(a.approx_age_days != null ? String(a.approx_age_days) : "");
             setStatus(a.status);
-            setLocationId(a.location_id ?? unassigned?.id ?? "");
+            setLocationId(a.location_id ?? defaultLoc?.id ?? "");
             setNotes(a.notes ?? "");
           }
         }
@@ -218,8 +219,7 @@ export default function AnimalForm() {
           </div>
           <div>
             <label htmlFor="location">Location</label>
-            <select id="location" value={locationId} onChange={(e) => setLocationId(e.target.value)}>
-              <option value="">Unassigned</option>
+            <select id="location" value={locationId} onChange={(e) => setLocationId(e.target.value)} required={status === "active"}>
               {locations.map((l) => (
                 <option key={l.id} value={l.id}>{l.name}</option>
               ))}

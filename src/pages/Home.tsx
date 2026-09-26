@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { createEvent, getAnimals, getEvents, getMaintenance, getProtocols, getRanch } from "../lib/api";
 import { dueStatus, getRanchDueBoard } from "../lib/protocolEngine";
+import { isMaintenanceDue } from "../lib/maintenanceDue";
 import { todayIso } from "../lib/date";
 import type { Animal, AnimalEvent, DueItem, MaintenanceItem, Protocol, Ranch } from "../types";
 
@@ -101,9 +102,9 @@ export default function Home() {
       <MaintBucket label="Overdue" tone="overdue" items={maintBuckets.overdue} />
       <MaintBucket label="Due today" tone="due" items={maintBuckets.due} />
       <MaintBucket label="Next 14 days" tone="upcoming" items={maintBuckets.upcoming} />
-      {maintenance.length === 0 && (
+      {maintenanceDueCount(maintenance) === 0 && (
         <div className="empty">
-          No maintenance yet. <Link to="/maintenance">Add an item</Link>.
+          No maintenance due. <Link to="/maintenance">Add an item</Link>.
         </div>
       )}
 
@@ -130,12 +131,16 @@ function bucketDue(items: DueItem[]) {
 }
 
 function bucketMaintenance(items: MaintenanceItem[], today: string) {
-  const withDue = items.filter((m) => m.due_on);
+  const withDue = items.filter(isMaintenanceDue);
   return {
     overdue: withDue.filter((m) => dueStatus(m.due_on!, today) === "overdue"),
     due: withDue.filter((m) => dueStatus(m.due_on!, today) === "due"),
     upcoming: withDue.filter((m) => dueStatus(m.due_on!, today) === "upcoming"),
   };
+}
+
+function maintenanceDueCount(items: MaintenanceItem[]): number {
+  return items.filter(isMaintenanceDue).length;
 }
 
 function DueBucket({

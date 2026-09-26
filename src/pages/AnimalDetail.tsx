@@ -10,9 +10,10 @@ import {
 } from "../lib/api";
 import { getDueItems } from "../lib/protocolEngine";
 import { todayIso } from "../lib/date";
-import type { Animal, AnimalEvent, DueItem, EventType, Location, Protocol } from "../types";
+import type { Animal, AnimalEvent, AnimalStatus, DueItem, EventType, Location, Protocol } from "../types";
 
 const EVENT_TYPES: EventType[] = ["vaccine", "treatment", "check", "other"];
+const STATUSES: AnimalStatus[] = ["active", "sold", "dead", "culled", "missing"];
 
 export default function AnimalDetail() {
   const { id } = useParams();
@@ -26,6 +27,9 @@ export default function AnimalDetail() {
   const [showEvent, setShowEvent] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
   const [doneBusy, setDoneBusy] = useState<string | null>(null);
+  const [showStatus, setShowStatus] = useState(false);
+  const [statusPick, setStatusPick] = useState<AnimalStatus>("active");
+  const [statusBusy, setStatusBusy] = useState(false);
 
   const today = todayIso();
 
@@ -92,6 +96,35 @@ export default function AnimalDetail() {
     } finally {
       setActionBusy(false);
     }
+  }
+
+  async function saveStatus() {
+    if (!animal) return;
+    const next = statusPick;
+    if (next !== animal.status && next !== "active") {
+      const label = next.charAt(0).toUpperCase() + next.slice(1);
+      if (!confirm(`Set tag #${animal.tag_number} to ${label}? It will leave the default Active list.`)) return;
+    }
+    setStatusBusy(true);
+    setError(null);
+    try {
+      await updateAnimal(animal.id, { status: next });
+      if (next === "active") {
+        setShowStatus(false);
+        await load();
+      } else {
+        navigate("/ranch");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Status update failed");
+      setStatusBusy(false);
+    }
+  }
+
+  function openStatusPicker() {
+    if (!animal) return;
+    setStatusPick(animal.status);
+    setShowStatus(true);
   }
 
   async function doneToday(item: DueItem) {
@@ -222,6 +255,32 @@ export default function AnimalDetail() {
         ))
       )}
 
+      <div className="spacer" />
+      {showStatus ? (
+        <div className="card">
+          <label htmlFor="status-pick">Status</label>
+          <select
+            id="status-pick"
+            value={statusPick}
+            onChange={(e) => setStatusPick(e.target.value as AnimalStatus)}
+          >
+            {STATUSES.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+          <div className="spacer" />
+          <div className="row-inline">
+            <button className="primary block" disabled={statusBusy} onClick={saveStatus}>
+              {statusBusy ? "Saving…" : "Save status"}
+            </button>
+            <button className="block" type="button" disabled={statusBusy} onClick={() => setShowStatus(false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button className="primary block" onClick={openStatusPicker}>Change status</button>
+      )}
       <div className="spacer" />
       {animal.archived_at ? (
         <button className="primary block" disabled={actionBusy} onClick={unarchive}>
