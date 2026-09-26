@@ -1,42 +1,78 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { getAnimals, getEvents, getMaintenance, getProtocols, getRanch } from "../lib/api";
-import { getRanchDueBoard } from "../lib/protocolEngine";
-import { dueStatus } from "../lib/protocolEngine";
+import { createEvent, getAnimals, getEvents, getMaintenance, getProtocols, getRanch } from "../lib/api";
+import { dueStatus, getRanchDueBoard } from "../lib/protocolEngine";
 import { todayIso } from "../lib/date";
-import type { DueItem, MaintenanceItem, Ranch } from "../types";
+import type { Animal, AnimalEvent, DueItem, MaintenanceItem, Protocol, Ranch } from "../types";
 
 export default function Home() {
   const [ranch, setRanch] = useState<Ranch | null>(null);
-  const [due, setDue] = useState<DueItem[]>([]);
+  const [animals, setAnimals] = useState<Animal[]>([]);
+  const [protocols, setProtocols] = useState<Protocol[]>([]);
+  const [events, setEvents] = useState<AnimalEvent[]>([]);
   const [maintenance, setMaintenance] = useState<MaintenanceItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [doneBusy, setDoneBusy] = useState<string | null>(null);
   const today = todayIso();
+
+  const load = useCallback(async () => {
+    const [r, a, p, e, m] = await Promise.all([
+      getRanch(),
+      getAnimals(),
+      getProtocols(),
+      getEvents(),
+      getMaintenance(),
+    ]);
+    setRanch(r);
+    setAnimals(a);
+    setProtocols(p);
+    setEvents(e);
+    setMaintenance(m);
+  }, []);
 
   useEffect(() => {
     (async () => {
       try {
-        const [r, animals, protocols, events, maint] = await Promise.all([
-          getRanch(),
-          getAnimals(),
-          getProtocols(),
-          getEvents(),
-          getMaintenance(),
-        ]);
-        setRanch(r);
-        setDue(getRanchDueBoard(animals, protocols, events, today));
-        setMaintenance(maint);
+        await load();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load");
       } finally {
         setLoading(false);
       }
     })();
-  }, [today]);
+  }, [load]);
 
+  const due = useMemo(
+    () => getRanchDueBoard(animals, protocols, events, today),
+    [animals, protocols, events, today]
+  );
   const animalBuckets = useMemo(() => bucketDue(due), [due]);
   const maintBuckets = useMemo(() => bucketMaintenance(maintenance, today), [maintenance, today]);
+
+  async function doneToday(item: DueItem) {
+    const animal = animals.find((a) => a.id === item.animalId);
+    if (!animal) return;
+    setDoneBusy(`${item.animalId}-${item.protocolId}`);
+    setError(null);
+    try {
+      await createEvent({
+        ranch_id: animal.ranch_id,
+        animal_id: animal.id,
+        protocol_id: item.protocolId,
+        type: "treatment",
+        event_date: today,
+        product: null,
+        withdrawal_until: null,
+        notes: null,
+      });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not log event");
+    } finally {
+      setDoneBusy(null);
+    }
+  }
 
   if (loading) return <div className="loading">Loading…</div>;
 
@@ -52,9 +88,9 @@ export default function Home() {
       {error && <div className="error">{error}</div>}
 
       <h2>Animal care</h2>
-      <DueBucket label="Overdue" tone="overdue" items={animalBuckets.overdue} />
-      <DueBucket label="Due today" tone="due" items={animalBuckets.due} />
-      <DueBucket label="Next 14 days" tone="upcoming" items={animalBuckets.upcoming} />
+      <DueBucket label="Overdue" tone="overdue" items={animalBuckets.overdue} onDoneToday={doneToday} doneBusy={doneBusy} />
+      <DueBucket label="Due today" tone="due" items={animalBuckets.due} onDoneToday={doneToday} doneBusy={doneBusy} />
+      <DueBucket label="Next 14 days" tone="upcoming" items={animalBuckets.upcoming} onDoneToday={doneToday} doneBusy={doneBusy} />
       {due.length === 0 && (
         <div className="empty">
           Nothing due. <Link to="/protocols">Add a protocol</Link> or <Link to="/ranch">add animals</Link>.
@@ -102,22 +138,41 @@ function bucketMaintenance(items: MaintenanceItem[], today: string) {
   };
 }
 
-function DueBucket({ label, tone, items }: { label: string; tone: string; items: DueItem[] }) {
+function DueBucket({
+  label,
+  tone,
+  items,
+  onDoneToday,
+  doneBusy,
+}: {
+  label: string;
+  tone: string;
+  items: DueItem[];
+  onDoneToday: (item: DueItem) => void;
+  doneBusy: string | null;
+}) {
   if (items.length === 0) return null;
   return (
     <div>
       <div className="subtle" style={{ marginTop: 6 }}>{label}</div>
-      {items.map((i) => (
-        <Link key={`${i.animalId}-${i.protocolId}`} className={`card due-row ${tone}`} to={`/animals/${i.animalId}`}>
-          <div className="card row">
-            <div>
-              <div className="tag-num">#{i.tagNumber} <span className="subtle">{i.species}</span></div>
-              <div className="subtle">{i.reason}{i.approximate ? " · approx" : ""}</div>
+      {items.map((i) => {
+        const key = `${i.animalId}-${i.protocolId}`;
+        return (
+          <div key={key} className={`card due-row ${tone}`}>
+            <div className="card row" style={{ margin: 0, border: "none", padding: 0 }}>
+              <Link to={`/animals/${i.animalId}`} style={{ flex: 1, color: "inherit" }}>
+                <div className="tag-num">#{i.tagNumber} <span className="subtle">{i.species}</span></div>
+                <div className="subtle">{i.reason}{i.approximate ? " · approx" : ""}</div>
+              </Link>
+              <span className={`pill ${tone}`}>{i.dueDate}</span>
             </div>
-            <span className={`pill ${tone}`}>{i.dueDate}</span>
+            <div className="spacer" />
+            <button className="primary block" disabled={doneBusy === key} onClick={() => onDoneToday(i)}>
+              {doneBusy === key ? "Saving…" : "Done today"}
+            </button>
           </div>
-        </Link>
-      ))}
+        );
+      })}
     </div>
   );
 }

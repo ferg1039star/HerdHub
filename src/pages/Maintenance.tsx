@@ -1,5 +1,11 @@
 import { useEffect, useState } from "react";
-import { createMaintenance, deleteMaintenance, getMaintenance, getRanch } from "../lib/api";
+import {
+  createMaintenance,
+  deleteMaintenance,
+  getMaintenance,
+  getRanch,
+  updateMaintenance,
+} from "../lib/api";
 import { dueStatus } from "../lib/protocolEngine";
 import { todayIso } from "../lib/date";
 import type { MaintenanceItem } from "../types";
@@ -16,6 +22,15 @@ export default function Maintenance() {
   const [dueOn, setDueOn] = useState("");
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
+
+  // Inline edit state.
+  const [editId, setEditId] = useState<string | null>(null);
+  const [eTitle, setETitle] = useState("");
+  const [eCompleted, setECompleted] = useState("");
+  const [eDue, setEDue] = useState("");
+  const [eNotes, setENotes] = useState("");
+  const [eBusy, setEBusy] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   const today = todayIso();
 
@@ -66,6 +81,55 @@ export default function Maintenance() {
     }
   }
 
+  function startEdit(m: MaintenanceItem) {
+    setEditId(m.id);
+    setETitle(m.title);
+    setECompleted(m.completed_on ?? "");
+    setEDue(m.due_on ?? "");
+    setENotes(m.notes ?? "");
+    setError(null);
+  }
+
+  async function saveEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editId) return;
+    if (!eTitle.trim()) {
+      setError("Title is required.");
+      return;
+    }
+    setEBusy(true);
+    setError(null);
+    try {
+      await updateMaintenance(editId, {
+        title: eTitle.trim(),
+        completed_on: eCompleted || null,
+        due_on: eDue || null,
+        notes: eNotes.trim() || null,
+      });
+      setEditId(null);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setEBusy(false);
+    }
+  }
+
+  async function markDone(m: MaintenanceItem) {
+    setBusyId(m.id);
+    setError(null);
+    try {
+      // Sets completed_on to today; leaves due_on untouched so the operator can
+      // set the next follow-up date by hand when they want one.
+      await updateMaintenance(m.id, { completed_on: today });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function remove(id: string) {
     if (!confirm("Delete this maintenance item?")) return;
     await deleteMaintenance(id);
@@ -109,11 +173,37 @@ export default function Maintenance() {
         <div className="empty">No maintenance items yet.</div>
       ) : (
         items.map((m) => {
+          if (editId === m.id) {
+            return (
+              <form key={m.id} className="card" onSubmit={saveEdit}>
+                <label htmlFor={`et-${m.id}`}>Title</label>
+                <input id={`et-${m.id}`} value={eTitle} onChange={(e) => setETitle(e.target.value)} />
+                <div className="row-inline">
+                  <div>
+                    <label htmlFor={`ec-${m.id}`}>Completed on</label>
+                    <input id={`ec-${m.id}`} type="date" value={eCompleted} onChange={(e) => setECompleted(e.target.value)} />
+                  </div>
+                  <div>
+                    <label htmlFor={`ed-${m.id}`}>Next due</label>
+                    <input id={`ed-${m.id}`} type="date" value={eDue} onChange={(e) => setEDue(e.target.value)} />
+                  </div>
+                </div>
+                <label htmlFor={`en-${m.id}`}>Notes</label>
+                <textarea id={`en-${m.id}`} value={eNotes} onChange={(e) => setENotes(e.target.value)} />
+                <div className="spacer" />
+                <div className="row-inline">
+                  <button className="primary block" type="submit" disabled={eBusy}>{eBusy ? "Saving…" : "Save"}</button>
+                  <button className="block" type="button" onClick={() => setEditId(null)}>Cancel</button>
+                </div>
+              </form>
+            );
+          }
+
           const st = m.due_on ? dueStatus(m.due_on, today) : null;
           return (
             <div key={m.id} className="card">
               <div className="card row" style={{ margin: 0, border: "none", padding: 0 }}>
-                <div>
+                <div onClick={() => startEdit(m)} style={{ flex: 1, cursor: "pointer" }}>
                   <h3>{m.title}</h3>
                   <div className="subtle">
                     {m.completed_on ? `Done ${m.completed_on}` : "Not done"}
@@ -123,8 +213,15 @@ export default function Maintenance() {
                 </div>
                 <div className="right">
                   {st && <span className={`pill ${st}`}>{st}</span>}
-                  <div><button className="ghost" onClick={() => remove(m.id)}>Delete</button></div>
                 </div>
+              </div>
+              <div className="spacer" />
+              <div className="row-inline">
+                <button className="primary block" disabled={busyId === m.id} onClick={() => markDone(m)}>
+                  {busyId === m.id ? "Saving…" : "Done today"}
+                </button>
+                <button className="block" onClick={() => startEdit(m)}>Edit</button>
+                <button className="danger block" onClick={() => remove(m.id)}>Delete</button>
               </div>
             </div>
           );

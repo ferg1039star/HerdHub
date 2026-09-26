@@ -130,6 +130,11 @@ export async function createMaintenance(input: MaintenanceInput): Promise<void> 
   if (error) throw error;
 }
 
+export async function updateMaintenance(id: string, input: Partial<MaintenanceInput>): Promise<void> {
+  const { error } = await supabase.from("maintenance_items").update(input).eq("id", id);
+  if (error) throw error;
+}
+
 export async function deleteMaintenance(id: string): Promise<void> {
   const { error } = await supabase.from("maintenance_items").delete().eq("id", id);
   if (error) throw error;

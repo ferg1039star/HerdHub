@@ -6,7 +6,8 @@ import { sortAnimalsByTag } from "../lib/sortTags";
 import { todayIso } from "../lib/date";
 import type { Animal, AnimalEvent, AnimalStatus, DueItem, Location, Protocol } from "../types";
 
-const STATUSES: (AnimalStatus | "all")[] = ["active", "sold", "dead", "culled", "missing", "all"];
+type StatusFilter = AnimalStatus | "archived" | "all";
+const STATUSES: StatusFilter[] = ["active", "sold", "dead", "culled", "missing", "archived", "all"];
 
 export default function MyRanch() {
   const [animals, setAnimals] = useState<Animal[]>([]);
@@ -16,7 +17,7 @@ export default function MyRanch() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [status, setStatus] = useState<AnimalStatus | "all">("active");
+  const [status, setStatus] = useState<StatusFilter>("active");
   const [species, setSpecies] = useState<string | null>(null);
   const [locationId, setLocationId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -46,8 +47,16 @@ export default function MyRanch() {
 
   const filtered = useMemo(() => {
     const list = animals.filter((a) => {
-      if (a.archived_at) return false;
-      if (status !== "all" && a.status !== status) return false;
+      const archived = a.archived_at != null;
+      if (status === "archived") {
+        if (!archived) return false;
+      } else if (status === "all") {
+        // All includes archived and non-archived tags.
+      } else {
+        // Active + specific status chips exclude archived tags.
+        if (archived) return false;
+        if (a.status !== status) return false;
+      }
       if (species && a.species.toLowerCase() !== species.toLowerCase()) return false;
       if (locationId && a.location_id !== locationId) return false;
       if (search.trim() && !a.tag_number.includes(search.trim())) return false;
@@ -131,7 +140,9 @@ export default function MyRanch() {
                   </div>
                 </div>
                 <div className="right">
-                  {urgent ? (
+                  {a.archived_at ? (
+                    <span className="pill muted">archived</span>
+                  ) : urgent ? (
                     <span className={`pill ${urgent.status}`}>{urgent.status}</span>
                   ) : (
                     <span className="pill muted">ok</span>

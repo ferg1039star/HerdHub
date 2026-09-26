@@ -10,7 +10,7 @@ import {
 } from "../lib/api";
 import { getDueItems } from "../lib/protocolEngine";
 import { todayIso } from "../lib/date";
-import type { Animal, AnimalEvent, EventType, Location, Protocol } from "../types";
+import type { Animal, AnimalEvent, DueItem, EventType, Location, Protocol } from "../types";
 
 const EVENT_TYPES: EventType[] = ["vaccine", "treatment", "check", "other"];
 
@@ -24,6 +24,8 @@ export default function AnimalDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showEvent, setShowEvent] = useState(false);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [doneBusy, setDoneBusy] = useState<string | null>(null);
 
   const today = todayIso();
 
@@ -65,9 +67,54 @@ export default function AnimalDetail() {
 
   async function archive() {
     if (!animal) return;
-    if (!confirm(`Archive tag #${animal.tag_number}? It leaves the active list but events are kept.`)) return;
-    await updateAnimal(animal.id, { archived_at: new Date().toISOString(), status: "sold" });
-    navigate("/ranch");
+    if (!confirm(`Archive tag #${animal.tag_number}? It leaves the active list but events and status are kept.`)) return;
+    setActionBusy(true);
+    setError(null);
+    try {
+      await updateAnimal(animal.id, { archived_at: new Date().toISOString() });
+      navigate("/ranch");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Archive failed");
+      setActionBusy(false);
+    }
+  }
+
+  async function unarchive() {
+    if (!animal) return;
+    if (!confirm(`Unarchive tag #${animal.tag_number}? It returns to the ranch list.`)) return;
+    setActionBusy(true);
+    setError(null);
+    try {
+      await updateAnimal(animal.id, { archived_at: null });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unarchive failed");
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
+  async function doneToday(item: DueItem) {
+    if (!animal) return;
+    setDoneBusy(item.protocolId);
+    setError(null);
+    try {
+      await createEvent({
+        ranch_id: animal.ranch_id,
+        animal_id: animal.id,
+        protocol_id: item.protocolId,
+        type: "treatment",
+        event_date: today,
+        product: null,
+        withdrawal_until: null,
+        notes: null,
+      });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not log event");
+    } finally {
+      setDoneBusy(null);
+    }
   }
 
   if (loading) return <div className="loading">Loading…</div>;
@@ -83,6 +130,10 @@ export default function AnimalDetail() {
       </div>
 
       {error && <div className="error">{error}</div>}
+
+      {animal.archived_at && (
+        <div className="notice">Archived on {animal.archived_at.slice(0, 10)} · use Unarchive below to restore.</div>
+      )}
 
       <div className="card">
         {animal.photo_url && (
@@ -123,6 +174,14 @@ export default function AnimalDetail() {
               </div>
               <span className={`pill ${d.status}`}>{d.dueDate}</span>
             </div>
+            <div className="spacer" />
+            <button
+              className="primary block"
+              disabled={doneBusy === d.protocolId}
+              onClick={() => doneToday(d)}
+            >
+              {doneBusy === d.protocolId ? "Saving…" : "Done today"}
+            </button>
           </div>
         ))
       )}
@@ -164,7 +223,15 @@ export default function AnimalDetail() {
       )}
 
       <div className="spacer" />
-      <button className="danger block" onClick={archive}>Archive tag</button>
+      {animal.archived_at ? (
+        <button className="primary block" disabled={actionBusy} onClick={unarchive}>
+          {actionBusy ? "Working…" : "Unarchive tag"}
+        </button>
+      ) : (
+        <button className="danger block" disabled={actionBusy} onClick={archive}>
+          {actionBusy ? "Working…" : "Archive tag"}
+        </button>
+      )}
     </div>
   );
 }
