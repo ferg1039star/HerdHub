@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { createEvent, getAnimals, getEvents, getMaintenance, getProtocols, getRanch } from "../lib/api";
+import { createEvent, getAnimals, getEvents, getLocations, getMaintenance, getProtocols, getRanch } from "../lib/api";
 import { dueStatus, getRanchDueBoard } from "../lib/protocolEngine";
 import { isMaintenanceDue } from "../lib/maintenanceDue";
 import { displayMaintenanceTag, sortMaintenanceByTag } from "../lib/maintenanceTags";
 import { todayIso } from "../lib/date";
-import type { Animal, AnimalEvent, DueItem, MaintenanceItem, Protocol, Ranch } from "../types";
+import type { Animal, AnimalEvent, DueItem, Location, MaintenanceItem, Protocol, Ranch } from "../types";
 
 export default function Home() {
   const [ranch, setRanch] = useState<Ranch | null>(null);
@@ -13,24 +13,27 @@ export default function Home() {
   const [protocols, setProtocols] = useState<Protocol[]>([]);
   const [events, setEvents] = useState<AnimalEvent[]>([]);
   const [maintenance, setMaintenance] = useState<MaintenanceItem[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [doneBusy, setDoneBusy] = useState<string | null>(null);
   const today = todayIso();
 
   const load = useCallback(async () => {
-    const [r, a, p, e, m] = await Promise.all([
+    const [r, a, p, e, m, l] = await Promise.all([
       getRanch(),
       getAnimals(),
       getProtocols(),
       getEvents(),
       getMaintenance(),
+      getLocations(),
     ]);
     setRanch(r);
     setAnimals(a);
     setProtocols(p);
     setEvents(e);
     setMaintenance(m);
+    setLocations(l);
   }, []);
 
   useEffect(() => {
@@ -51,6 +54,7 @@ export default function Home() {
   );
   const animalBuckets = useMemo(() => bucketDue(due), [due]);
   const maintBuckets = useMemo(() => bucketMaintenance(maintenance, today), [maintenance, today]);
+  const locName = (id: string | null) => locations.find((l) => l.id === id)?.name ?? "—";
 
   async function doneToday(item: DueItem) {
     const animal = animals.find((a) => a.id === item.animalId);
@@ -100,9 +104,9 @@ export default function Home() {
       )}
 
       <h2>Ranch maintenance</h2>
-      <MaintBucket label="Overdue" tone="overdue" items={maintBuckets.overdue} />
-      <MaintBucket label="Due today" tone="due" items={maintBuckets.due} />
-      <MaintBucket label="Next 14 days" tone="upcoming" items={maintBuckets.upcoming} />
+      <MaintBucket label="Overdue" tone="overdue" items={maintBuckets.overdue} locName={locName} />
+      <MaintBucket label="Due today" tone="due" items={maintBuckets.due} locName={locName} />
+      <MaintBucket label="Next 14 days" tone="upcoming" items={maintBuckets.upcoming} locName={locName} />
       {maintenanceDueCount(maintenance) === 0 && (
         <div className="empty">
           No maintenance due. <Link to="/maintenance">Add an item</Link>.
@@ -183,7 +187,17 @@ function DueBucket({
   );
 }
 
-function MaintBucket({ label, tone, items }: { label: string; tone: string; items: MaintenanceItem[] }) {
+function MaintBucket({
+  label,
+  tone,
+  items,
+  locName,
+}: {
+  label: string;
+  tone: string;
+  items: MaintenanceItem[];
+  locName: (id: string | null) => string;
+}) {
   if (items.length === 0) return null;
   return (
     <div>
@@ -194,7 +208,7 @@ function MaintBucket({ label, tone, items }: { label: string; tone: string; item
             <div>
               <div className="tag-num">{displayMaintenanceTag(m.tag_number)}</div>
               <h3 style={{ margin: "2px 0 0", fontSize: 15 }}>{m.title}</h3>
-              {m.notes && <div className="subtle">{m.notes}</div>}
+              <div className="subtle">{locName(m.location_id)}</div>
             </div>
             <span className={`pill ${tone}`}>{m.due_on}</span>
           </div>

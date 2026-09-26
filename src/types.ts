@@ -78,8 +78,19 @@ export interface MaintenanceItem {
   ranch_id: string;
   tag_number: string;
   title: string;
+  location_id: string | null;
+  created_on: string;
   completed_on: string | null;
   due_on: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface MaintenanceLogEntry {
+  id: string;
+  ranch_id: string;
+  maintenance_id: string;
+  performed_on: string;
   notes: string | null;
   created_at: string;
 }

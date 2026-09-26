@@ -139,7 +139,7 @@ export default function Settings() {
           <>
             <div style={{ fontSize: "1.1rem", fontWeight: 600 }}>{name || "My Ranch"}</div>
             <div className="spacer" />
-            <button className="block" onClick={() => { setNameDraft(name); setEditingName(true); }}>
+            <button className="primary block" onClick={() => { setNameDraft(name); setEditingName(true); }}>
               Edit name
             </button>
           </>

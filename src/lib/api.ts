@@ -6,6 +6,7 @@ import type {
   AnimalEvent,
   Location,
   MaintenanceItem,
+  MaintenanceLogEntry,
   Protocol,
   Ranch,
 } from "../types";
@@ -167,6 +168,41 @@ export async function updateMaintenance(id: string, input: Partial<MaintenanceIn
 export async function deleteMaintenance(id: string): Promise<void> {
   const { error } = await supabase.from("maintenance_items").delete().eq("id", id);
   if (error) throw error;
+}
+
+export async function getMaintenanceLog(): Promise<MaintenanceLogEntry[]> {
+  const { data, error } = await supabase
+    .from("maintenance_log")
+    .select("*")
+    .order("performed_on", { ascending: false })
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export type MaintenanceLogInput = Omit<MaintenanceLogEntry, "id" | "created_at">;
+
+export async function createMaintenanceLog(input: MaintenanceLogInput): Promise<void> {
+  const { error } = await supabase.from("maintenance_log").insert(input);
+  if (error) throw error;
+}
+
+export async function deleteMaintenanceLog(id: string): Promise<void> {
+  const { error } = await supabase.from("maintenance_log").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export async function logMaintenanceDoneToday(
+  ranchId: string,
+  maintenanceId: string,
+  performedOn: string
+): Promise<void> {
+  await createMaintenanceLog({
+    ranch_id: ranchId,
+    maintenance_id: maintenanceId,
+    performed_on: performedOn,
+    notes: null,
+  });
 }
 
 // Deletes the signed-in user's account and all associated data.

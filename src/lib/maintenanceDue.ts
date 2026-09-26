@@ -1,17 +1,11 @@
 import { sortMaintenanceByTag } from "./maintenanceTags";
 import type { MaintenanceItem } from "../types";
 
-/** Item still needs work on the due board / Maintenance Due section. */
+/** Parent still on the Due board when it has a next due date set. */
 export function isMaintenanceDue(m: MaintenanceItem): boolean {
-  if (!m.due_on) return false;
-  if (!m.completed_on) return true;
-  return m.due_on > m.completed_on;
+  return Boolean(m.due_on);
 }
 
 export function maintenanceDueItems(items: MaintenanceItem[]): MaintenanceItem[] {
   return sortMaintenanceByTag(items.filter(isMaintenanceDue));
-}
-
-export function maintenanceLogItems(items: MaintenanceItem[]): MaintenanceItem[] {
-  return sortMaintenanceByTag(items.filter((m) => m.completed_on));
 }
