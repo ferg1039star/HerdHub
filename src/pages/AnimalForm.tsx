@@ -9,6 +9,12 @@ import {
   updateAnimal,
 } from "../lib/api";
 import { supabase } from "../lib/supabase";
+import {
+  animalPhotoStoragePath,
+  compressImageFile,
+  PhotoTooLargeError,
+  storagePathFromPublicUrl,
+} from "../lib/compressImage";
 import { isIntegerTag } from "../lib/sortTags";
 import { errorMessage, isUniqueViolation } from "../lib/errors";
 import type { Animal, AnimalSex, AnimalStatus, DobPrecision, Location } from "../types";
@@ -27,6 +33,7 @@ export default function AnimalForm() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [photoError, setPhotoError] = useState<string | null>(null);
 
   const [tag, setTag] = useState("");
   const [species, setSpecies] = useState("");
@@ -80,12 +87,21 @@ export default function AnimalForm() {
     return "unknown";
   }, [dob, approxAge]);
 
-  async function uploadPhotoIfAny(): Promise<string | null> {
-    if (!photoFile || !ranchId) return existing?.photo_url ?? null;
-    const ext = photoFile.name.split(".").pop() || "jpg";
-    const path = `${ranchId}/${crypto.randomUUID()}.${ext}`;
-    const { error: upErr } = await supabase.storage.from("animal-photos").upload(path, photoFile, {
+  async function uploadPhotoForAnimal(animalId: string): Promise<string> {
+    if (!photoFile || !ranchId) {
+      throw new Error("No photo selected.");
+    }
+    const compressed = await compressImageFile(photoFile);
+    const path = animalPhotoStoragePath(ranchId, animalId);
+    const previousPath = existing?.photo_url
+      ? storagePathFromPublicUrl(existing.photo_url)
+      : null;
+    if (previousPath && previousPath !== path) {
+      await supabase.storage.from("animal-photos").remove([previousPath]);
+    }
+    const { error: upErr } = await supabase.storage.from("animal-photos").upload(path, compressed, {
       upsert: true,
+      contentType: "image/jpeg",
     });
     if (upErr) throw upErr;
     const { data } = supabase.storage.from("animal-photos").getPublicUrl(path);
@@ -95,6 +111,7 @@ export default function AnimalForm() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setPhotoError(null);
 
     if (!isIntegerTag(tag)) {
       setError("Tag number must be digits only (v1). Suffixes come later.");
@@ -111,15 +128,7 @@ export default function AnimalForm() {
 
     setBusy(true);
     try {
-      let photoUrl: string | null = existing?.photo_url ?? null;
-      try {
-        photoUrl = await uploadPhotoIfAny();
-      } catch {
-        // Photo is optional — don't block the save if storage upload fails.
-        photoUrl = existing?.photo_url ?? null;
-      }
-
-      const payload = {
+      const basePayload = {
         ranch_id: ranchId!,
         tag_number: tag.trim(),
         species: species.trim(),
@@ -130,18 +139,44 @@ export default function AnimalForm() {
         dob_precision: dobPrecision,
         status,
         location_id: locationId || null,
-        photo_url: photoUrl,
+        photo_url: existing?.photo_url ?? null,
         notes: notes.trim() || null,
         archived_at: existing?.archived_at ?? null,
       };
 
+      let animalId = id ?? "";
       if (editing && id) {
-        await updateAnimal(id, payload);
-        navigate(`/animals/${id}`);
+        await updateAnimal(id, basePayload);
+        animalId = id;
       } else {
-        const created = await createAnimal(payload);
-        navigate(`/animals/${created.id}`);
+        const created = await createAnimal(basePayload);
+        animalId = created.id;
       }
+
+      if (photoFile) {
+        try {
+          const photoUrl = await uploadPhotoForAnimal(animalId);
+          await updateAnimal(animalId, { photo_url: photoUrl });
+        } catch (err) {
+          const msg =
+            err instanceof PhotoTooLargeError || err instanceof Error
+              ? err.message
+              : "Photo upload failed.";
+          const friendly =
+            msg.includes("400KB") || msg.includes("compress") || msg.includes("read")
+              ? `${msg}${editing ? "" : " Tag was saved."}`
+              : `${msg} Tag saved without a new photo.`;
+          setPhotoError(friendly);
+          if (editing) {
+            setExisting((prev) => (prev ? { ...prev, ...basePayload, id: animalId } : prev));
+            return;
+          }
+          navigate(`/animals/${animalId}/edit`, { replace: true });
+          return;
+        }
+      }
+
+      navigate(`/animals/${animalId}`);
     } catch (err) {
       setError(
         isUniqueViolation(err) ? "That tag number already exists on this ranch." : errorMessage(err)
@@ -161,6 +196,7 @@ export default function AnimalForm() {
       </div>
 
       {error && <div className="error">{error}</div>}
+      {photoError && <div className="error">{photoError}</div>}
 
       <form onSubmit={submit}>
         <label htmlFor="tag">Tag number (digits only)</label>
@@ -227,11 +263,19 @@ export default function AnimalForm() {
           </div>
         </div>
 
-        <label htmlFor="photo">Photo (optional)</label>
-        <input id="photo" type="file" accept="image/*" onChange={(e) => setPhotoFile(e.target.files?.[0] ?? null)} />
-
         <label htmlFor="notes">Notes</label>
         <textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
+
+        <label htmlFor="photo">Photo (optional)</label>
+        <input
+          id="photo"
+          type="file"
+          accept="image/*"
+          onChange={(e) => {
+            setPhotoFile(e.target.files?.[0] ?? null);
+            setPhotoError(null);
+          }}
+        />
 
         <div className="spacer" />
         <button className="primary block" type="submit" disabled={busy}>

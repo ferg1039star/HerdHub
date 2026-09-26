@@ -84,10 +84,14 @@ export default function Home() {
 
   return (
     <div>
-      <div className="page-head">
-        <div>
+      <div className="page-head home-head">
+        <div className="home-head-title">
           <h1>{ranch?.name ?? "My Ranch"}</h1>
           <div className="subtle">Due board · {today}</div>
+        </div>
+        <div className="home-head-actions">
+          <Link className="btn primary" to="/animals/new">+ Tag</Link>
+          <Link className="btn primary" to="/maintenance?add=1">+ Maintenance</Link>
         </div>
       </div>
 
@@ -113,16 +117,6 @@ export default function Home() {
         </div>
       )}
 
-      <h2>Shortcuts</h2>
-      <div className="row-inline">
-        <Link className="btn block" to="/ranch">🐄 My Ranch</Link>
-        <Link className="btn block" to="/protocols">💉 Protocols</Link>
-      </div>
-      <div className="spacer" />
-      <div className="row-inline">
-        <Link className="btn block" to="/maintenance">🛠️ Maintenance</Link>
-        <Link className="btn block" to="/settings">⚙️ Settings</Link>
-      </div>
     </div>
   );
 }

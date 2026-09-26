@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   createMaintenance,
   deleteMaintenance,
@@ -18,6 +19,7 @@ import { todayIso } from "../lib/date";
 import type { Location, MaintenanceItem } from "../types";
 
 export default function Maintenance() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [items, setItems] = useState<MaintenanceItem[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   const [logRows, setLogRows] = useState<MaintenanceLogRow[]>([]);
@@ -74,6 +76,13 @@ export default function Maintenance() {
       }
     })();
   }, []);
+
+  useEffect(() => {
+    if (searchParams.get("add") === "1") {
+      setShowForm(true);
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   useEffect(() => {
     if (!locationId && defaultLocationId) setLocationId(defaultLocationId);
