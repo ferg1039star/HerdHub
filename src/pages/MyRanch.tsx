@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { getAnimals, getEvents, getLocations, getProtocols } from "../lib/api";
-import { getDueItems } from "../lib/protocolEngine";
+import { getDueItems, HOME_DUE_HORIZON_DAYS } from "../lib/protocolEngine";
 import { sortAnimalsByTag } from "../lib/sortTags";
 import { todayIso } from "../lib/date";
 import type { Animal, AnimalEvent, AnimalStatus, DueItem, Location, Protocol } from "../types";
@@ -128,7 +128,7 @@ export default function MyRanch() {
         </div>
       ) : (
         filtered.map((a) => {
-          const urgent = mostUrgent(getDueItems(a, protocols, events, today));
+          const urgent = mostUrgent(getDueItems(a, protocols, events, today, HOME_DUE_HORIZON_DAYS));
           return (
             <Link key={a.id} className="card" to={`/animals/${a.id}`}>
               <div className="card row" style={{ margin: 0, border: "none", padding: 0 }}>

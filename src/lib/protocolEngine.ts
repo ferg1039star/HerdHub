@@ -2,27 +2,12 @@
 // Keep this logic out of React components. Cover with unit tests.
 
 import type { Animal, AnimalEvent, DueItem, DueStatus, Protocol } from "../types";
+import { addDays, diffDays } from "./date";
 
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
+export const HOME_DUE_HORIZON_DAYS = 14;
+export const ANIMAL_DUE_HORIZON_DAYS = 40;
 
-export function toIsoDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
-
-export function parseIsoDate(value: string): Date {
-  const [y, m, day] = value.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, day));
-}
-
-export function addDays(isoDate: string, days: number): string {
-  const d = parseIsoDate(isoDate);
-  d.setUTCDate(d.getUTCDate() + days);
-  return toIsoDate(d);
-}
-
-export function diffDays(fromIso: string, toIso: string): number {
-  return Math.round((parseIsoDate(toIso).getTime() - parseIsoDate(fromIso).getTime()) / MS_PER_DAY);
-}
+export { addDays } from "./date";
 
 export function effectiveDob(animal: Animal, today: string): { dob: string | null; approximate: boolean } {
   if (animal.date_of_birth) {
@@ -37,11 +22,15 @@ export function effectiveDob(animal: Animal, today: string): { dob: string | nul
   return { dob: null, approximate: true };
 }
 
-export function dueStatus(dueDate: string, today: string): DueStatus | null {
+export function dueStatus(
+  dueDate: string,
+  today: string,
+  horizonDays: number = HOME_DUE_HORIZON_DAYS
+): DueStatus | null {
   const delta = diffDays(today, dueDate);
   if (delta < 0) return "overdue";
   if (delta === 0) return "due";
-  if (delta <= 14) return "upcoming";
+  if (delta <= horizonDays) return "upcoming";
   return null;
 }
 
@@ -56,11 +45,37 @@ function speciesMatch(protocolSpecies: string, animalSpecies: string): boolean {
   return protocolSpecies.trim().toLowerCase() === animalSpecies.trim().toLowerCase();
 }
 
+function intervalDueDate(
+  protocol: Protocol,
+  last: AnimalEvent | null,
+  dob: string | null,
+  today: string
+): { dueDate: string; reason: string } | null {
+  if (protocol.interval_days == null) return null;
+  if (last) {
+    return {
+      dueDate: addDays(last.event_date, protocol.interval_days),
+      reason: `Protocol: ${protocol.name} · last event ${last.event_date} · interval ${protocol.interval_days} days`,
+    };
+  }
+  if (dob) {
+    return {
+      dueDate: addDays(dob, protocol.interval_days),
+      reason: `Protocol: ${protocol.name} · no event yet · first interval ${protocol.interval_days} days from birth`,
+    };
+  }
+  return {
+    dueDate: today,
+    reason: `Protocol: ${protocol.name} · no event and no birth date · due now`,
+  };
+}
+
 export function getDueItems(
   animal: Animal,
   protocols: Protocol[],
   events: AnimalEvent[],
-  today: string
+  today: string,
+  horizonDays: number = HOME_DUE_HORIZON_DAYS
 ): DueItem[] {
   const { dob, approximate } = effectiveDob(animal, today);
   const animalEvents = events.filter((e) => e.animal_id === animal.id);
@@ -92,26 +107,25 @@ export function getDueItems(
             reason = `Protocol: ${protocol.name} · last event ${last.event_date} · interval ${protocol.interval_days} days`;
           }
         }
-      }
-    }
-
-    if (protocol.trigger_type === "interval") {
-      if (protocol.interval_days != null) {
-        if (last) {
-          dueDate = addDays(last.event_date, protocol.interval_days);
-          reason = `Protocol: ${protocol.name} · last event ${last.event_date} · interval ${protocol.interval_days} days`;
-        } else if (dob) {
-          dueDate = addDays(dob, protocol.interval_days);
-          reason = `Protocol: ${protocol.name} · no event yet · first interval ${protocol.interval_days} days from birth`;
-        } else {
-          dueDate = today;
-          reason = `Protocol: ${protocol.name} · no event and no birth date · due now`;
+      } else if (protocol.trigger_type === "both") {
+        const interval = intervalDueDate(protocol, last, dob, today);
+        if (interval) {
+          dueDate = interval.dueDate;
+          reason = interval.reason;
         }
       }
     }
 
+    if (protocol.trigger_type === "interval") {
+      const interval = intervalDueDate(protocol, last, dob, today);
+      if (interval) {
+        dueDate = interval.dueDate;
+        reason = interval.reason;
+      }
+    }
+
     if (!dueDate) continue;
-    const status = dueStatus(dueDate, today);
+    const status = dueStatus(dueDate, today, horizonDays);
     if (!status) continue;
 
     items.push({
@@ -134,11 +148,12 @@ export function getRanchDueBoard(
   animals: Animal[],
   protocols: Protocol[],
   events: AnimalEvent[],
-  today: string
+  today: string,
+  horizonDays: number = HOME_DUE_HORIZON_DAYS
 ): DueItem[] {
   return animals
     .filter((a) => a.status === "active" && !a.archived_at)
-    .flatMap((a) => getDueItems(a, protocols, events, today))
+    .flatMap((a) => getDueItems(a, protocols, events, today, horizonDays))
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate) || compareTags(a.tagNumber, b.tagNumber));
 }
 

@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
 import { formatNextMaintenanceTagNumber } from "./maintenanceTags";
+import { storagePathFromPublicUrl } from "./compressImage";
 import { isUniqueViolation } from "./errors";
 import type {
   Animal,
@@ -203,6 +204,30 @@ export async function logMaintenanceDoneToday(
     performed_on: performedOn,
     notes: null,
   });
+}
+
+/** Delete storage objects under animal-photos/{ranchId}/ not referenced by any animal photo_url. */
+export async function removeUnusedAnimalPhotos(ranchId: string): Promise<number> {
+  const animals = await getAnimals();
+  const inUse = new Set<string>();
+  for (const a of animals) {
+    if (!a.photo_url) continue;
+    const path = storagePathFromPublicUrl(a.photo_url);
+    if (path) inUse.add(path);
+  }
+
+  const { data: files, error: listErr } = await supabase.storage.from("animal-photos").list(ranchId);
+  if (listErr) throw listErr;
+
+  const toRemove = (files ?? [])
+    .filter((f) => f.name && !inUse.has(`${ranchId}/${f.name}`))
+    .map((f) => `${ranchId}/${f.name}`);
+
+  if (toRemove.length === 0) return 0;
+
+  const { error: removeErr } = await supabase.storage.from("animal-photos").remove(toRemove);
+  if (removeErr) throw removeErr;
+  return toRemove.length;
 }
 
 // Deletes the signed-in user's account and all associated data.

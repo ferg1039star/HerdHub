@@ -105,6 +105,15 @@ describe("getDueItems — interval trigger", () => {
     expect(items[0].status).toBe("due");
   });
 
+  it("both with no DOB and no event uses interval fallback due today", () => {
+    const a = animal({ date_of_birth: null, approx_age_days: null, dob_precision: "unknown" });
+    const p = protocol({ trigger_type: "both", age_days: 30, interval_days: 90, name: "Combo" });
+    const items = getDueItems(a, [p], [], TODAY);
+    expect(items).toHaveLength(1);
+    expect(items[0].dueDate).toBe(TODAY);
+    expect(items[0].status).toBe("due");
+  });
+
   it("ignores protocols for other species (case-insensitive match)", () => {
     const a = animal({ species: "Cow" });
     const p = protocol({ species: "pig", trigger_type: "interval", interval_days: 30 });

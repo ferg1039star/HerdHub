@@ -1,10 +1,24 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { createEvent, getAnimals, getEvents, getLocations, getMaintenance, getProtocols, getRanch } from "../lib/api";
-import { dueStatus, getRanchDueBoard } from "../lib/protocolEngine";
+import {
+  createEvent,
+  getAnimals,
+  getEvents,
+  getLocations,
+  getMaintenance,
+  getProtocols,
+  getRanch,
+  logMaintenanceDoneToday,
+} from "../lib/api";
+import {
+  dueStatus,
+  getRanchDueBoard,
+  HOME_DUE_HORIZON_DAYS,
+} from "../lib/protocolEngine";
 import { isMaintenanceDue } from "../lib/maintenanceDue";
 import { displayMaintenanceTag, sortMaintenanceByTag } from "../lib/maintenanceTags";
-import { todayIso } from "../lib/date";
+import { formatDisplayDate, todayIso } from "../lib/date";
+import { activeWithdrawalsForRanch } from "../lib/withdrawals";
 import type { Animal, AnimalEvent, DueItem, Location, MaintenanceItem, Protocol, Ranch } from "../types";
 
 export default function Home() {
@@ -17,6 +31,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [doneBusy, setDoneBusy] = useState<string | null>(null);
+  const [maintDoneBusy, setMaintDoneBusy] = useState<string | null>(null);
   const today = todayIso();
 
   const load = useCallback(async () => {
@@ -49,14 +64,18 @@ export default function Home() {
   }, [load]);
 
   const due = useMemo(
-    () => getRanchDueBoard(animals, protocols, events, today),
+    () => getRanchDueBoard(animals, protocols, events, today, HOME_DUE_HORIZON_DAYS),
     [animals, protocols, events, today]
   );
   const animalBuckets = useMemo(() => bucketDue(due), [due]);
   const maintBuckets = useMemo(() => bucketMaintenance(maintenance, today), [maintenance, today]);
   const locName = (id: string | null) => locations.find((l) => l.id === id)?.name ?? "—";
+  const withholdings = useMemo(
+    () => activeWithdrawalsForRanch(animals, events, today),
+    [animals, events, today]
+  );
 
-  async function doneToday(item: DueItem) {
+  async function doneTodayCare(item: DueItem) {
     const animal = animals.find((a) => a.id === item.animalId);
     if (!animal) return;
     setDoneBusy(`${item.animalId}-${item.protocolId}`);
@@ -80,6 +99,19 @@ export default function Home() {
     }
   }
 
+  async function doneTodayMaint(m: MaintenanceItem) {
+    setMaintDoneBusy(m.id);
+    setError(null);
+    try {
+      await logMaintenanceDoneToday(m.ranch_id, m.id, today);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not log maintenance");
+    } finally {
+      setMaintDoneBusy(null);
+    }
+  }
+
   if (loading) return <div className="loading">Loading…</div>;
 
   return (
@@ -87,7 +119,7 @@ export default function Home() {
       <div className="page-head home-head">
         <div className="home-head-title">
           <h1>{ranch?.name ?? "My Ranch"}</h1>
-          <div className="subtle">Due board · {today}</div>
+          <div className="subtle">Due board · {formatDisplayDate(today)}</div>
         </div>
         <div className="home-head-actions">
           <Link className="btn primary" to="/animals/new">+ Tag</Link>
@@ -97,10 +129,24 @@ export default function Home() {
 
       {error && <div className="error">{error}</div>}
 
+      {withholdings.length > 0 && (
+        <>
+          <h2>Meat/milk withhold</h2>
+          {withholdings.map((w) => (
+            <Link key={w.animalId} className="card" to={`/animals/${w.animalId}`}>
+              <div className="card row" style={{ margin: 0, border: "none", padding: 0 }}>
+                <span className="tag-num">#{w.tagNumber}</span>
+                <span className="subtle">until {formatDisplayDate(w.until)}</span>
+              </div>
+            </Link>
+          ))}
+        </>
+      )}
+
       <h2>Animal care</h2>
-      <DueBucket label="Overdue" tone="overdue" items={animalBuckets.overdue} onDoneToday={doneToday} doneBusy={doneBusy} />
-      <DueBucket label="Due today" tone="due" items={animalBuckets.due} onDoneToday={doneToday} doneBusy={doneBusy} />
-      <DueBucket label="Next 14 days" tone="upcoming" items={animalBuckets.upcoming} onDoneToday={doneToday} doneBusy={doneBusy} />
+      <DueBucket label="Overdue" tone="overdue" items={animalBuckets.overdue} onDoneToday={doneTodayCare} doneBusy={doneBusy} />
+      <DueBucket label="Due today" tone="due" items={animalBuckets.due} onDoneToday={doneTodayCare} doneBusy={doneBusy} />
+      <DueBucket label="Next 14 days" tone="upcoming" items={animalBuckets.upcoming} onDoneToday={doneTodayCare} doneBusy={doneBusy} />
       {due.length === 0 && (
         <div className="empty">
           Nothing due. <Link to="/protocols">Add a protocol</Link> or <Link to="/ranch">add animals</Link>.
@@ -108,9 +154,9 @@ export default function Home() {
       )}
 
       <h2>Ranch maintenance</h2>
-      <MaintBucket label="Overdue" tone="overdue" items={maintBuckets.overdue} locName={locName} />
-      <MaintBucket label="Due today" tone="due" items={maintBuckets.due} locName={locName} />
-      <MaintBucket label="Next 14 days" tone="upcoming" items={maintBuckets.upcoming} locName={locName} />
+      <MaintBucket label="Overdue" tone="overdue" items={maintBuckets.overdue} locName={locName} onDoneToday={doneTodayMaint} doneBusy={maintDoneBusy} />
+      <MaintBucket label="Due today" tone="due" items={maintBuckets.due} locName={locName} onDoneToday={doneTodayMaint} doneBusy={maintDoneBusy} />
+      <MaintBucket label="Next 14 days" tone="upcoming" items={maintBuckets.upcoming} locName={locName} onDoneToday={doneTodayMaint} doneBusy={maintDoneBusy} />
       {maintenanceDueCount(maintenance) === 0 && (
         <div className="empty">
           No maintenance due. <Link to="/maintenance">Add an item</Link>.
@@ -132,9 +178,9 @@ function bucketDue(items: DueItem[]) {
 function bucketMaintenance(items: MaintenanceItem[], today: string) {
   const withDue = sortMaintenanceByTag(items.filter(isMaintenanceDue));
   return {
-    overdue: withDue.filter((m) => dueStatus(m.due_on!, today) === "overdue"),
-    due: withDue.filter((m) => dueStatus(m.due_on!, today) === "due"),
-    upcoming: withDue.filter((m) => dueStatus(m.due_on!, today) === "upcoming"),
+    overdue: withDue.filter((m) => dueStatus(m.due_on!, today, HOME_DUE_HORIZON_DAYS) === "overdue"),
+    due: withDue.filter((m) => dueStatus(m.due_on!, today, HOME_DUE_HORIZON_DAYS) === "due"),
+    upcoming: withDue.filter((m) => dueStatus(m.due_on!, today, HOME_DUE_HORIZON_DAYS) === "upcoming"),
   };
 }
 
@@ -168,7 +214,7 @@ function DueBucket({
                 <div className="tag-num">#{i.tagNumber} <span className="subtle">{i.species}</span></div>
                 <div className="subtle">{i.reason}{i.approximate ? " · approx" : ""}</div>
               </Link>
-              <span className={`pill ${tone}`}>{i.dueDate}</span>
+              <span className={`pill ${tone}`}>{formatDisplayDate(i.dueDate)}</span>
             </div>
             <div className="spacer" />
             <button className="primary block" disabled={doneBusy === key} onClick={() => onDoneToday(i)}>
@@ -186,27 +232,35 @@ function MaintBucket({
   tone,
   items,
   locName,
+  onDoneToday,
+  doneBusy,
 }: {
   label: string;
   tone: string;
   items: MaintenanceItem[];
   locName: (id: string | null) => string;
+  onDoneToday: (m: MaintenanceItem) => void;
+  doneBusy: string | null;
 }) {
   if (items.length === 0) return null;
   return (
     <div>
       <div className="subtle" style={{ marginTop: 6 }}>{label}</div>
       {items.map((m) => (
-        <Link key={m.id} className={`card due-row ${tone}`} to="/maintenance">
-          <div className="card row">
-            <div>
+        <div key={m.id} className={`card due-row ${tone}`}>
+          <div className="card row" style={{ margin: 0, border: "none", padding: 0 }}>
+            <Link to="/maintenance" style={{ flex: 1, color: "inherit" }}>
               <div className="tag-num">{displayMaintenanceTag(m.tag_number)}</div>
               <h3 style={{ margin: "2px 0 0", fontSize: 15 }}>{m.title}</h3>
               <div className="subtle">{locName(m.location_id)}</div>
-            </div>
-            <span className={`pill ${tone}`}>{m.due_on}</span>
+            </Link>
+            <span className={`pill ${tone}`}>{formatDisplayDate(m.due_on)}</span>
           </div>
-        </Link>
+          <div className="spacer" />
+          <button className="primary block" disabled={doneBusy === m.id} onClick={() => onDoneToday(m)}>
+            {doneBusy === m.id ? "Saving…" : "Done today"}
+          </button>
+        </div>
       ))}
     </div>
   );

@@ -6,6 +6,7 @@ import {
   deleteLocation,
   getLocations,
   getRanch,
+  removeUnusedAnimalPhotos,
   updateRanchName,
 } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
@@ -30,6 +31,7 @@ export default function Settings() {
   const [newLocation, setNewLocation] = useState("");
   const [confirmName, setConfirmName] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const [photoSweepBusy, setPhotoSweepBusy] = useState(false);
 
   async function load() {
     const [r, l] = await Promise.all([getRanch(), getLocations()]);
@@ -91,6 +93,22 @@ export default function Settings() {
     if (!confirm("Delete this location? Animals there lose this pen assignment.")) return;
     await deleteLocation(id);
     await load();
+  }
+
+  async function sweepPhotos() {
+    if (!ranch) return;
+    if (!confirm("Remove animal photos in storage that no tag uses anymore?")) return;
+    setPhotoSweepBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const removed = await removeUnusedAnimalPhotos(ranch.id);
+      setNotice(removed === 0 ? "No unused photos found." : `Removed ${removed} unused photo${removed === 1 ? "" : "s"}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Photo cleanup failed");
+    } finally {
+      setPhotoSweepBusy(false);
+    }
   }
 
   async function handleDeleteAccount() {
@@ -160,6 +178,15 @@ export default function Settings() {
             </li>
           ))}
         </ul>
+      </div>
+
+      <h2>Storage</h2>
+      <div className="card">
+        <div className="subtle">Remove orphaned tag photos in your ranch folder (not linked to any animal).</div>
+        <div className="spacer" />
+        <button className="block" disabled={photoSweepBusy} onClick={sweepPhotos}>
+          {photoSweepBusy ? "Working…" : "Remove unused photos"}
+        </button>
       </div>
 
       <h2>Legal & support</h2>

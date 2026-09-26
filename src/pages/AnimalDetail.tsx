@@ -8,8 +8,10 @@ import {
   getProtocols,
   updateAnimal,
 } from "../lib/api";
-import { getDueItems } from "../lib/protocolEngine";
-import { todayIso } from "../lib/date";
+import { getDueItems, ANIMAL_DUE_HORIZON_DAYS } from "../lib/protocolEngine";
+import { formatDisplayDate, todayIso } from "../lib/date";
+import { formatAnimalAgeLine } from "../lib/ageInWords";
+import { activeWithdrawalForAnimal } from "../lib/withdrawals";
 import type { Animal, AnimalEvent, AnimalStatus, DueItem, EventType, Location, Protocol } from "../types";
 
 const EVENT_TYPES: EventType[] = ["vaccine", "treatment", "check", "other"];
@@ -64,8 +66,12 @@ export default function AnimalDetail() {
   }, [id]);
 
   const due = useMemo(
-    () => (animal ? getDueItems(animal, protocols, events, today) : []),
+    () => (animal ? getDueItems(animal, protocols, events, today, ANIMAL_DUE_HORIZON_DAYS) : []),
     [animal, protocols, events, today]
+  );
+  const activeWithhold = useMemo(
+    () => (animal ? activeWithdrawalForAnimal(events, animal.id, today) : null),
+    [animal, events, today]
   );
   const speciesProtocols = useMemo(
     () => protocols.filter((p) => animal && p.species.toLowerCase() === animal.species.toLowerCase()),
@@ -191,7 +197,7 @@ export default function AnimalDetail() {
       {error && <div className="error">{error}</div>}
 
       {animal.archived_at && (
-        <div className="notice">Archived on {animal.archived_at.slice(0, 10)} · use Unarchive below to restore.</div>
+        <div className="notice">Archived on {formatDisplayDate(animal.archived_at.slice(0, 10))} · use Unarchive below to restore.</div>
       )}
 
       <div className="card">
@@ -208,15 +214,15 @@ export default function AnimalDetail() {
         <div className="row-inline" style={{ marginTop: 8 }}>
           <div>
             <div className="subtle">Age</div>
-            <div>
-              {animal.date_of_birth
-                ? `DOB ${animal.date_of_birth}`
-                : animal.approx_age_days != null
-                  ? `~${animal.approx_age_days} days (approx)`
-                  : "unknown"}
-            </div>
+            <div>{formatAnimalAgeLine(animal, today)}</div>
           </div>
         </div>
+        {activeWithhold && (
+          <div style={{ marginTop: 8 }}>
+            <div className="subtle">Meat/milk withhold until</div>
+            <div>{formatDisplayDate(activeWithhold)}</div>
+          </div>
+        )}
         <div style={{ marginTop: 8 }}>
           <div className="subtle">Notes</div>
           <div>{animal.notes?.trim() ? animal.notes : "None"}</div>
@@ -234,7 +240,7 @@ export default function AnimalDetail() {
                 <h3>{d.protocolName}</h3>
                 <div className="subtle">{d.reason}{d.approximate ? " · approx date" : ""}</div>
               </div>
-              <span className={`pill ${d.status}`}>{d.dueDate}</span>
+              <span className={`pill ${d.status}`}>{formatDisplayDate(d.dueDate)}</span>
             </div>
             <div className="spacer" />
             <button
@@ -273,9 +279,9 @@ export default function AnimalDetail() {
               <div>
                 <h3>{e.type}{e.product ? ` · ${e.product}` : ""}</h3>
                 <div className="subtle">
-                  {e.event_date}
+                  {formatDisplayDate(e.event_date)}
                   {e.protocol_id ? ` · ${protocols.find((p) => p.id === e.protocol_id)?.name ?? "protocol"}` : ""}
-                  {e.withdrawal_until ? ` · withdrawal until ${e.withdrawal_until}` : ""}
+                  {e.withdrawal_until ? ` · meat/milk withhold until ${formatDisplayDate(e.withdrawal_until)}` : ""}
                 </div>
                 {e.notes && <div className="subtle">{e.notes}</div>}
               </div>
@@ -414,7 +420,7 @@ function AddEventForm({
       </select>
       <label htmlFor="eprod">Product / description</label>
       <input id="eprod" value={product} onChange={(e) => setProduct(e.target.value)} />
-      <label htmlFor="ewith">Withdrawal until (optional)</label>
+      <label htmlFor="ewith">Meat/milk withhold until (optional)</label>
       <input id="ewith" type="date" value={withdrawal} onChange={(e) => setWithdrawal(e.target.value)} />
       <label htmlFor="enotes">Notes</label>
       <textarea id="enotes" value={notes} onChange={(e) => setNotes(e.target.value)} />

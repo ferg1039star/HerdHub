@@ -11,11 +11,11 @@ import {
   logMaintenanceDoneToday,
   updateMaintenance,
 } from "../lib/api";
-import { dueStatus } from "../lib/protocolEngine";
+import { dueStatus, HOME_DUE_HORIZON_DAYS } from "../lib/protocolEngine";
 import { maintenanceDueItems } from "../lib/maintenanceDue";
 import { buildMaintenanceLogRows, type MaintenanceLogRow } from "../lib/maintenanceLog";
 import { displayMaintenanceTag } from "../lib/maintenanceTags";
-import { todayIso } from "../lib/date";
+import { formatDisplayDate, todayIso } from "../lib/date";
 import type { Location, MaintenanceItem } from "../types";
 
 export default function Maintenance() {
@@ -258,7 +258,7 @@ export default function Maintenance() {
               <div style={{ flex: 1 }}>
                 <div className="tag-num">{displayMaintenanceTag(row.tag_number)}</div>
                 <div>
-                  {row.title} · {locName(row.location_id)} · {row.performed_on}
+                  {row.title} · {locName(row.location_id)} · {formatDisplayDate(row.performed_on)}
                 </div>
                 {row.notes && <div className="subtle">{row.notes}</div>}
               </div>
@@ -338,7 +338,7 @@ function DueMaintenanceCard({
     );
   }
 
-  const st = m.due_on ? dueStatus(m.due_on, today) : null;
+  const st = m.due_on ? dueStatus(m.due_on, today, HOME_DUE_HORIZON_DAYS) : null;
 
   return (
     <div className="card">
@@ -348,7 +348,7 @@ function DueMaintenanceCard({
           <h3 style={{ margin: "2px 0 0" }}>{m.title}</h3>
           <div className="subtle">
             {locationName}
-            {m.due_on ? ` · due ${m.due_on}` : ""}
+            {m.due_on ? ` · due ${formatDisplayDate(m.due_on)}` : ""}
           </div>
         </div>
         <div className="right">
