@@ -146,9 +146,11 @@ async function allocateNextMaintenanceTagNumber(ranchId: string): Promise<string
 }
 
 export async function createMaintenance(input: MaintenanceCreateInput): Promise<void> {
-  const tag_number = await allocateNextMaintenanceTagNumber(input.ranch_id);
-  const { error } = await supabase.from("maintenance_items").insert({ ...input, tag_number });
-  if (error) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const tag_number = await allocateNextMaintenanceTagNumber(input.ranch_id);
+    const { error } = await supabase.from("maintenance_items").insert({ ...input, tag_number });
+    if (!error) return;
+    if (isUniqueViolation(error) && attempt === 0) continue;
     if (isUniqueViolation(error)) throw new Error(MAINT_TAG_COLLISION);
     throw error;
   }
