@@ -17,5 +17,5 @@ export function sortMaintenanceByTag<T extends { tag_number: string }>(items: T[
 }
 
 export function displayMaintenanceTag(tagNumber: string): string {
-  return `#${tagNumber}`;
+  return `M${tagNumber}`;
 }

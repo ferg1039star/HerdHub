@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatNextMaintenanceTagNumber, sortMaintenanceByTag } from "./maintenanceTags";
+import { displayMaintenanceTag, formatNextMaintenanceTagNumber, sortMaintenanceByTag } from "./maintenanceTags";
 
 describe("formatNextMaintenanceTagNumber", () => {
   it("starts at 001", () => {
